@@ -8,9 +8,20 @@ const element = PReact.createElement(
 )
 
 /** @jsx PReact.createElement */
-const elements = <div id='foo1'>
-  <a>this is a </a>
-</div>
+const elements =
+  <Counter />
+
+const useState = PReact.useState;
+
+/** @jsx PReact.createElement */
+function Counter() {
+  const [count, setCount] = useState(0);
+
+  return (<div>
+    <h1 onClick={()=> setCount(count+1)}>count:{count}</h1>
+  </div>)
+}
+
 
 window.onload = () => {
   const container = document.getElementById('root');

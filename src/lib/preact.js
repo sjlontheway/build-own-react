@@ -22,6 +22,7 @@ export function createElement(type, props, ...children) {
 }
 
 function createDom(fiber) {
+  console.log('createDom:', fiber.type)
   const dom = fiber.type === 'TEXT_ELEMENT' ? document.createTextNode('') :
     document.createElement(fiber.type);
 
@@ -29,6 +30,7 @@ function createDom(fiber) {
     .filter(key => key !== 'children')
     .forEach(name => dom[name] = fiber.props[name])
 
+  updateDom(dom, {}, fiber.props);
   return dom;
 }
 
@@ -49,13 +51,13 @@ function workLoop(deadline) {
 
 function updateDom(dom, preProps, nextProps) {
 
+  console.log('updateDOm:',dom)
   // remove old event listener;
   Object.keys(preProps)
     .filter(key => key.startsWith("on") && preProps[key] !== nextProps[key])
     .forEach(name => {
       dom.removeEventListener(name.toLowerCase().substring(2), preProps[name])
     })
-
 
   //remove old props
   Object.keys(preProps)
@@ -64,12 +66,12 @@ function updateDom(dom, preProps, nextProps) {
 
   // add new event listener
   Object.keys(nextProps)
-    .filter(key => key.startsWith(on) && preProps[key] !== nextProps[key])
+    .filter(key => key.startsWith('on') && preProps[key] !== nextProps[key])
     .forEach(name => dom.addEventListener(name.toLocaleLowerCase().substring(2), nextProps[name]))
 
   // add or update props
   Object.keys(nextProps)
-    .filter(key => preProps[key] !== nextProps[key])
+    .filter(key => preProps[key] !== nextProps[key] && key !== 'children')
     .forEach(name => dom[name] = nextProps[name]);
 
 }
@@ -94,8 +96,6 @@ function commitWork(fiber) {
   commitWork(fiber.child);
   commitWork(fiber.slibing);
 }
-
-
 
 function commitRoot() {
   // TODO ADD root dom 
@@ -132,19 +132,12 @@ requestIdleCallback(workLoop);
  * @param {下次待执行任务} nextUnitOfWork 
  */
 function performUnitWork(fiber) {
-  //创建fiber dom 节点
-  if (!fiber.dom) {
-    fiber.dom = createDom(fiber);
+  const isFunctionComponent = fiber.type instanceof Function;
+  if (isFunctionComponent) {
+    updateFunctionComponent(fiber);
+  } else {
+    updateHostComponent(fiber);
   }
-
-  // 将dom节点加入dom树
-  if (fiber.parent) {
-    fiber.parent.dom.appendChild(fiber.dom);
-  }
-
-  // 处理子节点，为子节点以及父节点创建fiber对象并将其作为下一个nextUnitOfWork 返回
-  const elements = fiber.props.children;
-  reconcileChildren(fiber, elements);
 
   if (fiber.child) {
     return fiber.child;
@@ -158,6 +151,15 @@ function performUnitWork(fiber) {
     nextFiber = nextFiber.parent;
   }
 }
+
+
+function updateHostComponent(fiber) {
+  if (!fiber.dom) {
+    fiber.dom = createDom(fiber);
+  }
+  reconcileChildren(fiber, fiber.props.children);
+}
+
 
 function reconcileChildren(wipFiber, elements) {
 
@@ -226,4 +228,47 @@ function reconcileChildren(wipFiber, elements) {
     index++;
   }
 
+}
+
+let wipFiber = null;
+let hookIndex = null;
+
+function updateFunctionComponent(fiber) {
+  wipFiber = fiber;
+  hookIndex = 0;
+  wipFiber.hooks = [];
+  const children = [fiber.type(fiber.props)];
+  reconcileChildren(fiber, children)
+}
+
+
+export function useState(initState) {
+  const oldHook = wipFiber.alternate &&
+    wipFiber.alternate.hooks &&
+    wipFiber.alternate.hooks[hookIndex];
+
+  const hook = {
+    state: oldHook ? oldHook.state : initState,
+    queue: []
+  }
+
+  const actions = oldHook ? oldHook.queue : [];
+  actions.forEach(action => {
+    hook.state = action(hook.state)
+  })
+
+  const setState = action => {
+    hook.queue.push(action);
+    wipRoot = {
+      dom: currentRoot.dom,
+      props: currentRoot.props,
+      alternate: currentRoot
+    }
+    nextUnitOfWork = wipRoot;
+    deletions = [];
+  }
+
+  wipFiber.hooks.push(hook);
+  hookIndex++;
+  return [hook.state, setState]
 }

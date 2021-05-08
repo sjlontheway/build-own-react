@@ -5,6 +5,7 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.createElement = createElement;
 exports.render = render;
+exports.useState = useState;
 
 function _readOnlyError(name) { throw new Error("\"" + name + "\" is read-only"); }
 
@@ -42,12 +43,14 @@ function createElement(type, props) {
 }
 
 function createDom(fiber) {
+  console.log('createDom:', fiber.type);
   var dom = fiber.type === 'TEXT_ELEMENT' ? document.createTextNode('') : document.createElement(fiber.type);
   Object.keys(fiber.props).filter(function (key) {
     return key !== 'children';
   }).forEach(function (name) {
     return dom[name] = fiber.props[name];
   });
+  updateDom(dom, {}, fiber.props);
   return dom;
 }
 
@@ -67,7 +70,8 @@ function workLoop(deadline) {
 }
 
 function updateDom(dom, preProps, nextProps) {
-  // remove old event listener;
+  console.log('updateDOm:', dom); // remove old event listener;
+
   Object.keys(preProps).filter(function (key) {
     return key.startsWith("on") && preProps[key] !== nextProps[key];
   }).forEach(function (name) {
@@ -81,13 +85,13 @@ function updateDom(dom, preProps, nextProps) {
   }); // add new event listener
 
   Object.keys(nextProps).filter(function (key) {
-    return key.startsWith(on) && preProps[key] !== nextProps[key];
+    return key.startsWith('on') && preProps[key] !== nextProps[key];
   }).forEach(function (name) {
     return dom.addEventListener(name.toLocaleLowerCase().substring(2), nextProps[name]);
   }); // add or update props
 
   Object.keys(nextProps).filter(function (key) {
-    return preProps[key] !== nextProps[key];
+    return preProps[key] !== nextProps[key] && key !== 'children';
   }).forEach(function (name) {
     return dom[name] = nextProps[name];
   });
@@ -142,19 +146,13 @@ requestIdleCallback(workLoop);
  */
 
 function performUnitWork(fiber) {
-  //创建fiber dom 节点
-  if (!fiber.dom) {
-    fiber.dom = createDom(fiber);
-  } // 将dom节点加入dom树
+  var isFunctionComponent = fiber.type instanceof Function;
 
-
-  if (fiber.parent) {
-    fiber.parent.dom.appendChild(fiber.dom);
-  } // 处理子节点，为子节点以及父节点创建fiber对象并将其作为下一个nextUnitOfWork 返回
-
-
-  var elements = fiber.props.children;
-  reconcileChildren(fiber, elements);
+  if (isFunctionComponent) {
+    updateFunctionComponent(fiber);
+  } else {
+    updateHostComponent(fiber);
+  }
 
   if (fiber.child) {
     return fiber.child;
@@ -169,6 +167,14 @@ function performUnitWork(fiber) {
 
     nextFiber = nextFiber.parent;
   }
+}
+
+function updateHostComponent(fiber) {
+  if (!fiber.dom) {
+    fiber.dom = createDom(fiber);
+  }
+
+  reconcileChildren(fiber, fiber.props.children);
 }
 
 function reconcileChildren(wipFiber, elements) {
@@ -231,4 +237,42 @@ function reconcileChildren(wipFiber, elements) {
     preSlibing = newFiber;
     index++;
   }
+}
+
+var wipFiber = null;
+var hookIndex = null;
+
+function updateFunctionComponent(fiber) {
+  wipFiber = fiber;
+  hookIndex = 0;
+  wipFiber.hooks = [];
+  var children = [fiber.type(fiber.props)];
+  reconcileChildren(fiber, children);
+}
+
+function useState(initState) {
+  var oldHook = wipFiber.alternate && wipFiber.alternate.hooks && wipFiber.alternate.hooks[hookIndex];
+  var hook = {
+    state: oldHook ? oldHook.state : initState,
+    queue: []
+  };
+  var actions = oldHook ? oldHook.queue : [];
+  actions.forEach(function (action) {
+    hook.state = action(hook.state);
+  });
+
+  var setState = function setState(action) {
+    hook.queue.push(action);
+    wipRoot = {
+      dom: currentRoot.dom,
+      props: currentRoot.props,
+      alternate: currentRoot
+    };
+    nextUnitOfWork = wipRoot;
+    deletions = [];
+  };
+
+  wipFiber.hooks.push(hook);
+  hookIndex++;
+  return [hook.state, setState];
 }
