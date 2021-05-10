@@ -7,8 +7,6 @@ exports.createElement = createElement;
 exports.render = render;
 exports.useState = useState;
 
-function _readOnlyError(name) { throw new Error("\"" + name + "\" is read-only"); }
-
 function _typeof(obj) { if (typeof Symbol === "function" && typeof Symbol.iterator === "symbol") { _typeof = function _typeof(obj) { return typeof obj; }; } else { _typeof = function _typeof(obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; }; } return _typeof(obj); }
 
 function ownKeys(object, enumerableOnly) { var keys = Object.keys(object); if (Object.getOwnPropertySymbols) { var symbols = Object.getOwnPropertySymbols(object); if (enumerableOnly) symbols = symbols.filter(function (sym) { return Object.getOwnPropertyDescriptor(object, sym).enumerable; }); keys.push.apply(keys, symbols); } return keys; }
@@ -45,11 +43,6 @@ function createElement(type, props) {
 function createDom(fiber) {
   console.log('createDom:', fiber.type);
   var dom = fiber.type === 'TEXT_ELEMENT' ? document.createTextNode('') : document.createElement(fiber.type);
-  Object.keys(fiber.props).filter(function (key) {
-    return key !== 'children';
-  }).forEach(function (name) {
-    return dom[name] = fiber.props[name];
-  });
   updateDom(dom, {}, fiber.props);
   return dom;
 }
@@ -70,8 +63,7 @@ function workLoop(deadline) {
 }
 
 function updateDom(dom, preProps, nextProps) {
-  console.log('updateDOm:', dom); // remove old event listener;
-
+  // remove old event listener;
   Object.keys(preProps).filter(function (key) {
     return key.startsWith("on") && preProps[key] !== nextProps[key];
   }).forEach(function (name) {
@@ -99,7 +91,14 @@ function updateDom(dom, preProps, nextProps) {
 
 function commitWork(fiber) {
   if (!fiber) return;
-  var parentDom = fiber.parent.dom;
+  console.log('commitwork:', fiber);
+  var domParentFiber = fiber.parent;
+
+  while (!domParentFiber.dom) {
+    domParentFiber = domParentFiber.parent;
+  }
+
+  var parentDom = domParentFiber.dom;
 
   if (fiber.effectTag === "PLACEMENT" && fiber.dom !== null) {
     parentDom.appendChild(fiber.dom);
@@ -179,19 +178,13 @@ function updateHostComponent(fiber) {
 
 function reconcileChildren(wipFiber, elements) {
   var index = 0;
-  var oldFiber = wipFiber.alternate && alternate.alternate.child;
+  var oldFiber = wipFiber.alternate && wipFiber.alternate.child;
   var preSlibing = null; // 创建children fiber节点
 
-  while (index < elements.length || oldFiber !== null) {
+  while (index < elements.length || oldFiber) {
     var element = elements[index]; // compare old fiber to element
 
-    var newFiber = null; //  {
-    //   type: element.type,
-    //   parent: wipFiber,
-    //   props: element.props,
-    //   dom: null,
-    // }
-
+    var newFiber = null;
     var sameType = oldFiber && element && oldFiber.type === element.type;
 
     if (sameType) {
@@ -224,13 +217,15 @@ function reconcileChildren(wipFiber, elements) {
       deletions.push(oldFiber);
     }
 
+    console.log('performUnitWork:', preSlibing, newFiber, element);
+
     if (oldFiber) {
-      oldFiber = (_readOnlyError("oldFiber"), oldFiber.slibing);
+      oldFiber = oldFiber.slibing;
     }
 
     if (index === 0) {
       wipFiber.child = newFiber;
-    } else {
+    } else if (element) {
       preSlibing.slibing = newFiber;
     }
 
@@ -258,7 +253,7 @@ function useState(initState) {
   };
   var actions = oldHook ? oldHook.queue : [];
   actions.forEach(function (action) {
-    hook.state = action(hook.state);
+    hook.state = action instanceof Function ? action(hook.state) : action;
   });
 
   var setState = function setState(action) {

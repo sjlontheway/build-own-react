@@ -2,7 +2,7 @@ import * as PReact from './lib/preact';
 
 const element = PReact.createElement(
   'div',
-  { id: 'foo' },
+  { id: 'foo',},
   PReact.createElement('a', null, 'bar'),
   PReact.createElement('b')
 )
@@ -18,7 +18,7 @@ function Counter() {
   const [count, setCount] = useState(0);
 
   return (<div>
-    <h1 onClick={()=> setCount(count+1)}>count:{count}</h1>
+    <h1 onClick={()=> setCount( c => c+1)}>count:{count}</h1>
   </div>)
 }
 

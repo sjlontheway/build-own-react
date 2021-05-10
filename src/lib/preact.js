@@ -26,10 +26,6 @@ function createDom(fiber) {
   const dom = fiber.type === 'TEXT_ELEMENT' ? document.createTextNode('') :
     document.createElement(fiber.type);
 
-  Object.keys(fiber.props)
-    .filter(key => key !== 'children')
-    .forEach(name => dom[name] = fiber.props[name])
-
   updateDom(dom, {}, fiber.props);
   return dom;
 }
@@ -51,7 +47,6 @@ function workLoop(deadline) {
 
 function updateDom(dom, preProps, nextProps) {
 
-  console.log('updateDOm:',dom)
   // remove old event listener;
   Object.keys(preProps)
     .filter(key => key.startsWith("on") && preProps[key] !== nextProps[key])
@@ -78,8 +73,14 @@ function updateDom(dom, preProps, nextProps) {
 
 function commitWork(fiber) {
   if (!fiber) return;
+  console.log('commitwork:', fiber)
 
-  const parentDom = fiber.parent.dom;
+  let domParentFiber = fiber.parent;
+  while (!domParentFiber.dom) {
+    domParentFiber = domParentFiber.parent;
+  }
+
+  const parentDom = domParentFiber.dom;
 
   if (fiber.effectTag === "PLACEMENT" && fiber.dom !== null) {
     parentDom.appendChild(fiber.dom);
@@ -162,25 +163,17 @@ function updateHostComponent(fiber) {
 
 
 function reconcileChildren(wipFiber, elements) {
-
   let index = 0;
-  const oldFiber = wipFiber.alternate && alternate.alternate.child;
+  let oldFiber = wipFiber.alternate && wipFiber.alternate.child;
   let preSlibing = null;
-
-
+  
   // 创建children fiber节点
-  while (index < elements.length || oldFiber !== null) {
+  while (index < elements.length || oldFiber) {
     const element = elements[index];
 
     // compare old fiber to element
     const newFiber = null;
-    //  {
-    //   type: element.type,
-    //   parent: wipFiber,
-    //   props: element.props,
-    //   dom: null,
-    // }
-
+  
     const sameType = oldFiber && element && oldFiber.type === element.type;
 
     if (sameType) {
@@ -213,7 +206,7 @@ function reconcileChildren(wipFiber, elements) {
       deletions.push(oldFiber);
     }
 
-
+    console.log('performUnitWork:', preSlibing, newFiber,element)
 
     if (oldFiber) {
       oldFiber = oldFiber.slibing;
@@ -221,13 +214,12 @@ function reconcileChildren(wipFiber, elements) {
 
     if (index === 0) {
       wipFiber.child = newFiber;
-    } else {
+    } else if(element){
       preSlibing.slibing = newFiber;
     }
     preSlibing = newFiber;
     index++;
   }
-
 }
 
 let wipFiber = null;
@@ -254,7 +246,7 @@ export function useState(initState) {
 
   const actions = oldHook ? oldHook.queue : [];
   actions.forEach(action => {
-    hook.state = action(hook.state)
+    hook.state = action instanceof Function ? action(hook.state) : action;
   })
 
   const setState = action => {
